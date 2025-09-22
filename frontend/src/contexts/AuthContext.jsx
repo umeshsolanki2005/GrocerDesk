@@ -86,6 +86,10 @@ export const AuthProvider = ({ children }) => {
     login,
     signup,
     logout,
+    updateUser: (newUser) => {
+      // Allow partial updates, merge with existing user
+      setUser((prev) => ({ ...(prev || {}), ...(newUser || {}) }));
+    },
     hasRole,
     hasAnyRole,
     loading

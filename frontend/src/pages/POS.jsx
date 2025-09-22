@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Grid,
@@ -58,6 +58,10 @@ const POS = () => {
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [loading, setLoading] = useState(false);
+  const [newCustomer, setNewCustomer] = useState({ name: '', email: '', phone: '', address: '' });
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [receiptData, setReceiptData] = useState(null);
+  const receiptRef = useRef(null);
 
   const fetchProducts = async () => {
     try {
@@ -166,7 +170,17 @@ const POS = () => {
         }))
       };
 
-      await api.post('/api/sales', saleData);
+      const res = await api.post('/api/sales', saleData);
+      const { sale_id, total } = res.data || {};
+      // Open receipt dialog with snapshot of this sale
+      setReceiptData({
+        sale_id,
+        total,
+        date: new Date().toLocaleString(),
+        customer: customers.find(c => c.user_id === selectedCustomer) || null,
+        items: cart.map(i => ({ ...i, subtotal: i.price * i.quantity }))
+      });
+      setReceiptOpen(true);
       showSnackbar('Sale completed successfully!');
       clearCart();
     } catch (error) {
@@ -454,17 +468,23 @@ const POS = () => {
             label="Customer Name"
             margin="normal"
             required
+            value={newCustomer.name}
+            onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
           />
           <TextField
             fullWidth
             label="Email"
             type="email"
             margin="normal"
+            value={newCustomer.email}
+            onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
           />
           <TextField
             fullWidth
             label="Phone"
             margin="normal"
+            value={newCustomer.phone}
+            onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
           />
           <TextField
             fullWidth
@@ -472,11 +492,119 @@ const POS = () => {
             multiline
             rows={3}
             margin="normal"
+            value={newCustomer.address}
+            onChange={(e) => setNewCustomer({ ...newCustomer, address: e.target.value })}
           />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setCustomerDialogOpen(false)}>Cancel</Button>
-          <Button variant="contained">Add Customer</Button>
+          <Button 
+            variant="contained"
+            onClick={async () => {
+              if (!newCustomer.name.trim()) {
+                showSnackbar('Customer name is required', 'error');
+                return;
+              }
+              try {
+                const resp = await api.post('/api/users', newCustomer);
+                showSnackbar('Customer added');
+                setCustomerDialogOpen(false);
+                setNewCustomer({ name: '', email: '', phone: '', address: '' });
+                // Refresh customers and preselect the new one
+                await fetchCustomers();
+                const created = resp.data?.user;
+                if (created?.user_id) setSelectedCustomer(created.user_id);
+              } catch (e) {
+                console.error('Add customer error', e);
+                showSnackbar(e.response?.data?.message || 'Failed to add customer', 'error');
+              }
+            }}
+          >
+            Add Customer
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Receipt Dialog */}
+      <Dialog open={receiptOpen} onClose={() => setReceiptOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Receipt</DialogTitle>
+        <DialogContent>
+          {receiptData && (
+            <Box ref={receiptRef} sx={{ p: 2 }}>
+              <Typography variant="h6" fontWeight="bold">GrocerDesk</Typography>
+              <Typography variant="body2" color="text.secondary">Sale ID: {receiptData.sale_id?.slice?.(-8) || '-'}</Typography>
+              <Typography variant="body2" color="text.secondary">Date: {receiptData.date}</Typography>
+              <Divider sx={{ my: 1 }} />
+              <Box sx={{ mb: 1 }}>
+                <Typography variant="subtitle2">Customer</Typography>
+                <Typography variant="body2">{receiptData.customer?.name || 'Walk-in Customer'}</Typography>
+                {receiptData.customer?.phone && (
+                  <Typography variant="body2">{receiptData.customer.phone}</Typography>
+                )}
+              </Box>
+              <Divider sx={{ my: 1 }} />
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Item</TableCell>
+                    <TableCell align="right">Qty</TableCell>
+                    <TableCell align="right">Price</TableCell>
+                    <TableCell align="right">Subtotal</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {receiptData.items.map((it) => (
+                    <TableRow key={it.product_id}>
+                      <TableCell>{it.name}</TableCell>
+                      <TableCell align="right">{it.quantity}</TableCell>
+                      <TableCell align="right">${it.price.toFixed(2)}</TableCell>
+                      <TableCell align="right">${(it.subtotal).toFixed(2)}</TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow>
+                    <TableCell colSpan={3} align="right">
+                      <Typography variant="subtitle1" fontWeight="bold">Total</Typography>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Typography variant="subtitle1" fontWeight="bold">${(receiptData.total ?? receiptData.items.reduce((t,i)=>t+i.subtotal,0)).toFixed(2)}</Typography>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+              <Typography variant="caption" display="block" sx={{ mt: 2 }}>
+                Thank you for shopping with us!
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setReceiptOpen(false)}>Close</Button>
+          <Button 
+            variant="contained"
+            startIcon={<Receipt />}
+            onClick={() => {
+              // Print the receipt area - users can choose "Save as PDF"
+              const printContents = receiptRef.current?.innerHTML;
+              const win = window.open('', '', 'width=600,height=700');
+              if (win && printContents) {
+                win.document.write(`<!doctype html><html><head><title>Receipt</title>
+                  <style>
+                    body { font-family: Arial, sans-serif; padding: 16px; }
+                    table { width: 100%; border-collapse: collapse; }
+                    th, td { border-bottom: 1px solid #ddd; padding: 8px; }
+                    th { text-align: left; }
+                  </style>
+                </head><body>${printContents}</body></html>`);
+                win.document.close();
+                win.focus();
+                win.print();
+                // Optionally close after print
+                setTimeout(() => win.close(), 200);
+              }
+            }}
+          >
+            Download/Print
+          </Button>
         </DialogActions>
       </Dialog>
 

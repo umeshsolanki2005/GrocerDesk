@@ -42,13 +42,16 @@ import {
   AttachMoney,
   ShoppingCart,
   Person,
-  CalendarToday
+  CalendarToday,
+  FileDownload,
+  TrendingUp
 } from '@mui/icons-material';
 import api from '../services/api';
 
 const Sales = () => {
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [selectedSale, setSelectedSale] = useState(null);
   const [saleDetailsOpen, setSaleDetailsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -60,10 +63,19 @@ const Sales = () => {
     total: 0,
     pages: 0
   });
+  const [analytics, setAnalytics] = useState(null);
+
+  // Helper function to safely convert to number
+  const safeNumber = (value) => {
+    const num = parseFloat(value);
+    return isNaN(num) ? 0 : num;
+  };
 
   const fetchSales = async (page = 1) => {
     try {
       setLoading(true);
+      setError(null);
+      
       const params = new URLSearchParams({
         page: page.toString(),
         limit: pagination.limit.toString()
@@ -78,10 +90,17 @@ const Sales = () => {
       }
 
       const response = await api.get(`/api/sales?${params}`);
-      setSales(response.data.sales);
-      setPagination(response.data.pagination);
+      setSales(response.data.sales || []);
+      setPagination(response.data.pagination || {
+        page: 1,
+        limit: 10,
+        total: 0,
+        pages: 0
+      });
     } catch (error) {
       console.error('Error fetching sales:', error);
+      setError(error.response?.data?.message || error.message || 'Failed to fetch sales data');
+      setSales([]);
       showSnackbar('Error fetching sales', 'error');
     } finally {
       setLoading(false);
@@ -90,7 +109,18 @@ const Sales = () => {
 
   useEffect(() => {
     fetchSales();
+    fetchAnalytics();
   }, [dateFilter]);
+
+  const fetchAnalytics = async () => {
+    try {
+      const period = dateFilter || '30';
+      const response = await api.get(`/api/sales/analytics?period=${period}`);
+      setAnalytics(response.data);
+    } catch (error) {
+      console.error('Error fetching analytics:', error);
+    }
+  };
 
   const showSnackbar = (message, severity = 'success') => {
     setSnackbar({ open: true, message, severity });
@@ -125,6 +155,27 @@ const Sales = () => {
     }
   };
 
+  const exportSales = () => {
+    const csvContent = [
+      ['Sale ID', 'Customer', 'Items', 'Total', 'Date'],
+      ...filteredSales.map(sale => [
+        sale.sale_id,
+        sale.customer_name || 'Walk-in Customer',
+        sale.item_count,
+        sale.total,
+        new Date(sale.sale_date).toLocaleDateString()
+      ])
+    ].map(row => row.join(',')).join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sales_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
   const filteredSales = sales.filter(sale =>
     (sale.customer_name && sale.customer_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
     sale.sale_id.toLowerCase().includes(searchTerm.toLowerCase())
@@ -138,8 +189,53 @@ const Sales = () => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD'
-    }).format(amount);
+    }).format(safeNumber(amount));
   };
+
+  if (loading) {
+    return (
+      <Box>
+        <Typography variant="h4" gutterBottom>Sales History</Typography>
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+          <Typography>Loading sales data...</Typography>
+        </Box>
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box>
+        <Typography variant="h4" gutterBottom>Sales History</Typography>
+        <Alert severity="error" sx={{ mb: 2 }}>
+          <Typography variant="h6">Error Loading Sales Data</Typography>
+          <Typography variant="body2" sx={{ mb: 1 }}>{error}</Typography>
+          <Typography variant="caption" color="text.secondary">
+            Check the browser console and server logs for more details.
+          </Typography>
+          <Box sx={{ mt: 2 }}>
+            <Button 
+              variant="outlined" 
+              onClick={() => fetchSales(pagination.page)} 
+              sx={{ mr: 1 }}
+              startIcon={<Refresh />}
+            >
+              Retry
+            </Button>
+            <Button 
+              variant="text" 
+              onClick={() => {
+                setError(null);
+                setSales([]);
+              }}
+            >
+              Clear Error
+            </Button>
+          </Box>
+        </Alert>
+      </Box>
+    );
+  }
 
   return (
     <Box>
@@ -148,13 +244,22 @@ const Sales = () => {
         <Typography variant="h4" fontWeight="bold">
           Sales History
         </Typography>
-        <Button
-          variant="outlined"
-          startIcon={<Refresh />}
-          onClick={() => fetchSales(pagination.page)}
-        >
-          Refresh
-        </Button>
+        <Box display="flex" gap={1}>
+          <Button
+            variant="outlined"
+            startIcon={<FileDownload />}
+            onClick={exportSales}
+          >
+            Export CSV
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<Refresh />}
+            onClick={() => fetchSales(pagination.page)}
+          >
+            Refresh
+          </Button>
+        </Box>
       </Box>
 
       {/* Stats Cards */}
@@ -166,7 +271,7 @@ const Sales = () => {
                 <Receipt color="primary" />
                 <Box>
                   <Typography variant="h6" fontWeight="bold">
-                    {pagination.total}
+                    {analytics?.summary?.total_sales || pagination.total}
                   </Typography>
                   <Typography color="textSecondary">
                     Total Sales
@@ -183,7 +288,7 @@ const Sales = () => {
                 <AttachMoney color="success" />
                 <Box>
                   <Typography variant="h6" fontWeight="bold">
-                    {formatCurrency(sales.reduce((total, sale) => total + sale.total, 0))}
+                    {formatCurrency(analytics?.summary?.total_revenue || sales.reduce((total, sale) => total + safeNumber(sale.total), 0))}
                   </Typography>
                   <Typography color="textSecondary">
                     Total Revenue
@@ -200,7 +305,7 @@ const Sales = () => {
                 <ShoppingCart color="info" />
                 <Box>
                   <Typography variant="h6" fontWeight="bold">
-                    {sales.reduce((total, sale) => total + sale.item_count, 0)}
+                    {sales.reduce((total, sale) => total + safeNumber(sale.item_count), 0)}
                   </Typography>
                   <Typography color="textSecondary">
                     Items Sold
@@ -214,13 +319,13 @@ const Sales = () => {
           <Card>
             <CardContent>
               <Box display="flex" alignItems="center" gap={2}>
-                <Person color="warning" />
+                <TrendingUp color="warning" />
                 <Box>
                   <Typography variant="h6" fontWeight="bold">
-                    {new Set(sales.map(sale => sale.customer_name).filter(Boolean)).size}
+                    {analytics?.summary?.avg_sale_amount ? formatCurrency(analytics.summary.avg_sale_amount) : '$0.00'}
                   </Typography>
                   <Typography color="textSecondary">
-                    Unique Customers
+                    Avg Sale Amount
                   </Typography>
                 </Box>
               </Box>
@@ -280,6 +385,16 @@ const Sales = () => {
         </CardContent>
       </Card>
 
+      {/* No Data Message */}
+      {sales.length === 0 && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          <Typography variant="h6">No Sales Data Found</Typography>
+          <Typography variant="body2">
+            There are no sales records yet. Sales will appear here once transactions are made through the POS system.
+          </Typography>
+        </Alert>
+      )}
+
       {/* Sales Table */}
       <Card>
         <TableContainer>
@@ -295,11 +410,11 @@ const Sales = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredSales.map((sale) => (
+              {filteredSales.length > 0 ? filteredSales.map((sale) => (
                 <TableRow key={sale.sale_id} hover>
                   <TableCell>
                     <Typography variant="subtitle2" fontWeight="medium">
-                      #{sale.sale_id.slice(-8)}
+                      #{sale.sale_id ? sale.sale_id.slice(-8) : 'N/A'}
                     </Typography>
                   </TableCell>
                   <TableCell>
@@ -351,7 +466,15 @@ const Sales = () => {
                     </Tooltip>
                   </TableCell>
                 </TableRow>
-              ))}
+              )) : (
+                <TableRow>
+                  <TableCell colSpan={6} align="center">
+                    <Typography variant="body2" color="text.secondary">
+                      No sales found
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </TableContainer>
@@ -385,7 +508,7 @@ const Sales = () => {
       {/* Sale Details Dialog */}
       <Dialog open={saleDetailsOpen} onClose={() => setSaleDetailsOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>
-          Sale Details - #{selectedSale?.sale?.sale_id?.slice(-8)}
+          Sale Details - #{selectedSale?.sale?.sale_id ? selectedSale.sale.sale_id.slice(-8) : 'N/A'}
         </DialogTitle>
         <DialogContent>
           {selectedSale && (

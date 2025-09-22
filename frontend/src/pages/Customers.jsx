@@ -120,11 +120,18 @@ const Customers = () => {
     }
 
     try {
+      // Build payload with only non-empty values to satisfy validators
+      const payload = {};
+      if (formData.name && formData.name.trim()) payload.name = formData.name.trim();
+      if (formData.email && formData.email.trim()) payload.email = formData.email.trim();
+      if (formData.phone && formData.phone.trim()) payload.phone = formData.phone.trim();
+      if (formData.address && formData.address.trim()) payload.address = formData.address.trim();
+
       if (editingCustomer) {
-        await api.put(`/api/users/${editingCustomer.user_id}`, formData);
+        await api.put(`/api/users/${editingCustomer.user_id}`, payload);
         showSnackbar('Customer updated successfully');
       } else {
-        await api.post('/api/users', formData);
+        await api.post('/api/users', payload);
         showSnackbar('Customer created successfully');
       }
 

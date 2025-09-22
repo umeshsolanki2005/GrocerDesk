@@ -37,7 +37,10 @@ import {
   Search,
   Inventory,
   Warning,
-  Refresh
+  Refresh,
+  TrendingUp,
+  TrendingDown,
+  Settings as SettingsIcon
 } from '@mui/icons-material';
 import api from '../services/api';
 
@@ -50,6 +53,9 @@ const Products = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [stockDialogOpen, setStockDialogOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [stockOperation, setStockOperation] = useState({ type: 'add', amount: '' });
   
   const [formData, setFormData] = useState({
     name: '',
@@ -162,6 +168,29 @@ const Products = () => {
         console.error('Error deleting product:', error);
         showSnackbar(error.response?.data?.message || 'Error deleting product', 'error');
       }
+    }
+  };
+
+  const handleStockAdjustment = (product) => {
+    setSelectedProduct(product);
+    setStockOperation({ type: 'add', amount: '' });
+    setStockDialogOpen(true);
+  };
+
+  const handleStockSubmit = async () => {
+    if (!stockOperation.amount || !selectedProduct) return;
+    
+    try {
+      await api.put(`/api/products/${selectedProduct.product_id}/stock`, {
+        stock: parseInt(stockOperation.amount),
+        operation: stockOperation.type
+      });
+      showSnackbar(`Stock ${stockOperation.type === 'add' ? 'added' : stockOperation.type === 'subtract' ? 'removed' : 'updated'} successfully`);
+      setStockDialogOpen(false);
+      fetchProducts();
+    } catch (error) {
+      console.error('Error updating stock:', error);
+      showSnackbar(error.response?.data?.message || 'Error updating stock', 'error');
     }
   };
 
@@ -434,6 +463,15 @@ const Products = () => {
                           <Edit />
                         </IconButton>
                       </Tooltip>
+                      <Tooltip title="Adjust Stock">
+                        <IconButton 
+                          size="small" 
+                          color="primary"
+                          onClick={() => handleStockAdjustment(product)}
+                        >
+                          <SettingsIcon />
+                        </IconButton>
+                      </Tooltip>
                       <Tooltip title="Delete">
                         <IconButton 
                           size="small" 
@@ -514,6 +552,77 @@ const Products = () => {
             </Button>
           </DialogActions>
         </form>
+      </Dialog>
+
+      {/* Stock Adjustment Dialog */}
+      <Dialog open={stockDialogOpen} onClose={() => setStockDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          Adjust Stock - {selectedProduct?.name}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 1 }}>
+            <Typography variant="body2" color="text.secondary" mb={2}>
+              Current Stock: {selectedProduct?.stock} units
+            </Typography>
+            
+            <FormControl fullWidth margin="normal">
+              <InputLabel>Operation</InputLabel>
+              <Select
+                value={stockOperation.type}
+                onChange={(e) => setStockOperation({ ...stockOperation, type: e.target.value })}
+                label="Operation"
+              >
+                <MenuItem value="add">
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <TrendingUp color="success" />
+                    Add Stock
+                  </Box>
+                </MenuItem>
+                <MenuItem value="subtract">
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <TrendingDown color="error" />
+                    Remove Stock
+                  </Box>
+                </MenuItem>
+                <MenuItem value="set">
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <SettingsIcon color="primary" />
+                    Set Stock
+                  </Box>
+                </MenuItem>
+              </Select>
+            </FormControl>
+            
+            <TextField
+              fullWidth
+              label="Amount"
+              type="number"
+              value={stockOperation.amount}
+              onChange={(e) => setStockOperation({ ...stockOperation, amount: e.target.value })}
+              margin="normal"
+              required
+              helperText={
+                stockOperation.type === 'add' 
+                  ? `New stock will be: ${(selectedProduct?.stock || 0) + parseInt(stockOperation.amount || 0)}`
+                  : stockOperation.type === 'subtract'
+                  ? `New stock will be: ${Math.max(0, (selectedProduct?.stock || 0) - parseInt(stockOperation.amount || 0))}`
+                  : stockOperation.type === 'set'
+                  ? `Stock will be set to: ${stockOperation.amount || 0}`
+                  : ''
+              }
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setStockDialogOpen(false)}>Cancel</Button>
+          <Button 
+            onClick={handleStockSubmit} 
+            variant="contained"
+            disabled={!stockOperation.amount}
+          >
+            Update Stock
+          </Button>
+        </DialogActions>
       </Dialog>
 
       {/* Snackbar */}

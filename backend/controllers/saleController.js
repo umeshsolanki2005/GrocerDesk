@@ -5,9 +5,21 @@ const { v4: uuidv4 } = require('uuid');
 // Get all sales with user info
 exports.getAllSales = async (req, res) => {
   try {
-    const { page = 1, limit = 10, start_date, end_date } = req.query;
-    const offset = (page - 1) * limit;
+    let { page = 1, limit = 10, start_date, end_date } = req.query;
+    
+    // Ensure parameters are integers
+    const pageNum = parseInt(page) || 1;
+    const lim = parseInt(limit) || 10;
+    const offset = (pageNum - 1) * lim;
 
+    console.log('getAllSales called with params:', { page, limit, start_date, end_date });
+    console.log('Processed params:', { pageNum, lim, offset });
+
+    // First, let's try a simple query to check if sales table has data
+    const [testRows] = await db.execute('SELECT COUNT(*) as count FROM sales');
+    console.log('Total sales in database:', testRows[0].count);
+
+    // Simplified query without subquery first
     let query = `
       SELECT 
         s.sale_id,
@@ -15,11 +27,9 @@ exports.getAllSales = async (req, res) => {
         u.name as customer_name,
         u.email as customer_email,
         s.sale_date,
-        s.total,
-        COUNT(si.sale_item_id) as item_count
+        s.total
       FROM sales s
       LEFT JOIN users u ON s.user_id = u.user_id
-      LEFT JOIN sale_items si ON s.sale_id = si.sale_id
     `;
     const params = [];
 
@@ -28,10 +38,35 @@ exports.getAllSales = async (req, res) => {
       params.push(start_date, end_date);
     }
 
-    query += ' GROUP BY s.sale_id, s.user_id, u.name, u.email, s.sale_date, s.total ORDER BY s.sale_date DESC LIMIT ? OFFSET ?';
-    params.push(parseInt(limit), parseInt(offset));
+    query += ' ORDER BY s.sale_date DESC LIMIT ? OFFSET ?';
+    params.push(lim, offset);
+
+    console.log('Executing query:', query);
+    console.log('With params:', params);
 
     const [rows] = await db.execute(query, params);
+    console.log('Query returned rows:', rows.length);
+
+    // Get item counts separately for now
+    const salesWithCounts = [];
+    for (const sale of rows) {
+      try {
+        const [itemCountResult] = await db.execute(
+          'SELECT COUNT(*) as item_count FROM sale_items WHERE sale_id = ?',
+          [sale.sale_id]
+        );
+        salesWithCounts.push({
+          ...sale,
+          item_count: itemCountResult[0].item_count || 0
+        });
+      } catch (itemError) {
+        console.error('Error getting item count for sale:', sale.sale_id, itemError);
+        salesWithCounts.push({
+          ...sale,
+          item_count: 0
+        });
+      }
+    }
 
     // Get total count for pagination
     let countQuery = 'SELECT COUNT(*) as total FROM sales s';
@@ -44,18 +79,26 @@ exports.getAllSales = async (req, res) => {
     const [countResult] = await db.execute(countQuery, countParams);
     const total = countResult[0].total;
 
+    console.log('Returning sales data:', { salesCount: salesWithCounts.length, total });
+
     res.json({
-      sales: rows,
+      sales: salesWithCounts,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: pageNum,
+        limit: lim,
         total,
-        pages: Math.ceil(total / limit)
+        pages: Math.ceil(total / lim)
       }
     });
   } catch (err) {
     console.error('Get all sales error:', err);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error details:', err.message);
+    console.error('Error stack:', err.stack);
+    res.status(500).json({ 
+      message: 'Server error',
+      error: err.message,
+      details: 'Check server logs for more information'
+    });
   }
 };
 

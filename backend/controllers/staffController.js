@@ -104,10 +104,10 @@ exports.updateStaff = async (req, res) => {
       }
     }
 
-    // Update staff
+    // Update staff (avoid undefined bind params by converting to null)
     await db.execute(
       'UPDATE staff SET name = COALESCE(?, name), email = COALESCE(?, email), role = COALESCE(?, role) WHERE staff_id = ?',
-      [name, email, role, id]
+      [name ?? null, email ?? null, role ?? null, id]
     );
 
     res.json({ message: 'Staff updated successfully' });

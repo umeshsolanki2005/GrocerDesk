@@ -100,10 +100,10 @@ exports.updateUser = async (req, res) => {
       }
     }
 
-    // Update user
+    // Update user (convert undefined to null)
     await db.execute(
       'UPDATE users SET name = COALESCE(?, name), email = COALESCE(?, email), phone = COALESCE(?, phone), address = COALESCE(?, address) WHERE user_id = ?',
-      [name, email, phone, address, id]
+      [name ?? null, email ?? null, phone ?? null, address ?? null, id]
     );
 
     res.json({ message: 'User updated successfully' });

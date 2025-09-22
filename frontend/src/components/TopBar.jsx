@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   AppBar,
   Toolbar,
@@ -16,15 +17,31 @@ import {
   Menu as MenuIcon,
   Notifications,
   AccountCircle,
-  Settings
+  Settings,
+  Chat
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 
 const TopBar = ({ onMenuClick }) => {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [anchorEl, setAnchorEl] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    // Check for unread conversations
+    const checkUnread = () => {
+      const count = localStorage.getItem('grocerdesk_conversations_unread') || '0';
+      setUnreadCount(parseInt(count));
+    };
+    
+    checkUnread();
+    // Listen for storage changes (cross-tab updates)
+    window.addEventListener('storage', checkUnread);
+    return () => window.removeEventListener('storage', checkUnread);
+  }, []);
 
   const handleProfileMenuOpen = (event) => {
     setAnchorEl(event.currentTarget);
@@ -76,6 +93,13 @@ const TopBar = ({ onMenuClick }) => {
         </Typography>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {/* Conversations */}
+          <IconButton color="inherit" onClick={() => navigate('/conversations')}>
+            <Badge badgeContent={unreadCount} color="error">
+              <Chat />
+            </Badge>
+          </IconButton>
+          
           {/* Notifications */}
           <IconButton color="inherit">
             <Badge badgeContent={4} color="error">
@@ -112,11 +136,11 @@ const TopBar = ({ onMenuClick }) => {
             open={Boolean(anchorEl)}
             onClose={handleProfileMenuClose}
           >
-            <MenuItem onClick={handleProfileMenuClose}>
+            <MenuItem onClick={() => { handleProfileMenuClose(); navigate('/profile'); }}>
               <AccountCircle sx={{ mr: 1 }} />
               Profile
             </MenuItem>
-            <MenuItem onClick={handleProfileMenuClose}>
+            <MenuItem onClick={() => { handleProfileMenuClose(); navigate('/settings'); }}>
               <Settings sx={{ mr: 1 }} />
               Settings
             </MenuItem>
