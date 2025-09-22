@@ -104,3 +104,26 @@ exports.login = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+// ------------------- GET CURRENT USER -------------------
+exports.getMe = async (req, res) => {
+  try {
+    const { staff_id } = req.user;
+    
+    const [rows] = await db.execute(
+      'SELECT staff_id, name, email, role FROM staff WHERE staff_id = ?',
+      [staff_id]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json({
+      user: rows[0]
+    });
+  } catch (err) {
+    console.error('Get me error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};

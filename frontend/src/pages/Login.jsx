@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Container, Paper, Typography, TextField, Button, Box, Alert, Link } from '@mui/material';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import Logo from '../components/Logo';
-import api from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function Login(){
   const [email, setEmail] = useState('');
@@ -10,21 +10,20 @@ export default function Login(){
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-    try {
-      const res = await api.post('/api/auth/login', { email, password });
-      localStorage.setItem('token', res.data.token);
-      // optionally save staff
-      localStorage.setItem('staff', JSON.stringify(res.data.staff));
-      setLoading(false);
-      navigate('/home'); // for now redirect to home; replace with dashboard later
-    } catch (err) {
-      setLoading(false);
-      setError(err.response?.data?.message || 'Login failed');
+    
+    const result = await login(email, password);
+    setLoading(false);
+    
+    if (result.success) {
+      navigate('/dashboard');
+    } else {
+      setError(result.message);
     }
   };
 

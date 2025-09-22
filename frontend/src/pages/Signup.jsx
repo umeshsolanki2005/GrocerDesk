@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Container, Paper, Typography, TextField, Button, Box, Alert, MenuItem } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import Logo from '../components/Logo';
-import api from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function Signup(){
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'cashier' });
@@ -10,6 +10,7 @@ export default function Signup(){
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { signup } = useAuth();
 
   const roles = ['admin','manager','cashier'];
 
@@ -18,16 +19,15 @@ export default function Signup(){
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(''); setSuccess(''); setLoading(true);
-    try {
-      const res = await api.post('/api/auth/signup', form);
-      localStorage.setItem('token', res.data.token);
-      localStorage.setItem('staff', JSON.stringify(res.data.staff));
+    
+    const result = await signup(form.name, form.email, form.password, form.role);
+    setLoading(false);
+    
+    if (result.success) {
       setSuccess('Account created. Redirecting…');
-      setLoading(false);
-      setTimeout(() => navigate('/'), 800);
-    } catch (err) {
-      setLoading(false);
-      setError(err.response?.data?.message || 'Signup failed');
+      setTimeout(() => navigate('/dashboard'), 800);
+    } else {
+      setError(result.message);
     }
   };
 
