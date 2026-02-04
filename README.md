@@ -4,7 +4,7 @@ A comprehensive grocery store management application built with React and Node.j
 
 ## Features
 
-### 🏪 Core Features
+### 🏪 Core Features and Idea
 - **Dashboard**: Real-time overview with key metrics and analytics
 - **Inventory Management**: Complete CRUD operations for products and categories
 - **Point of Sale (POS)**: Modern checkout system with cart functionality
