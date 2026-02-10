@@ -85,7 +85,7 @@ The application uses the following MySQL tables:
    CREATE DATABASE grocery;
    USE grocery;
    
-   -- Run the SQL commands from the project description
+   -- Run the SQL commands from the project description.
    ```
 
 5. Start the backend server:
