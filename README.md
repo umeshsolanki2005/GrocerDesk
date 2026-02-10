@@ -28,7 +28,7 @@ A comprehensive grocery store management application built with React and Node.j
 ## Tech Stack
 
 ### Frontend
-- React 19
+- React 19.0
 - Material-UI (MUI) v7
 - React Router v7
 - Axios for API calls
