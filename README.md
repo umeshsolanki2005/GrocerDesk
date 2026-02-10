@@ -180,7 +180,7 @@ The application uses the following MySQL tables:
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the MIT License..
 
 ## Support
 
