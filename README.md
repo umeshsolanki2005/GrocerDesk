@@ -1,4 +1,4 @@
-# GrocerDesk - Grocery Store Management System
+# GrocerDesk - Grocery Store Management System.
 
 A comprehensive grocery store management application built with React and Node.js, featuring inventory management, point of sale, staff management, and analytics.
 
